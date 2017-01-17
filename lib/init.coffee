@@ -3,13 +3,13 @@ path = require 'path'
 
 lint = (editor) ->
   helpers = require('atom-linter')
-  regex = /((?:[A-Z]:)?[^:]+):([^:]+):(.+)/
-  file = editor.getPath()
+  regex = /%(Error|Warning)-?([^:]*): ((?:[A-Z]:)?[^:]+):([^:]+):(.+)/
+  file = editor.getPath().replace(/\\/g,"/")
   dirname = path.dirname(file)
-  
-  args = ("#{arg}" for arg in atom.config.get('linter-verilog.extraOptions'))
-  args = args.concat ['-t', 'null', '-I', dirname,  file]
-  helpers.exec('iverilog', args, {stream: 'both'}).then (output) ->
+
+  args = ("#{arg}" for arg in atom.config.get('linter-verilator.extraOptions'))
+  args = args.concat ['-I' + dirname,  file]
+  helpers.exec(atom.config.get('linter-verilator.executable'), args, {stream: 'both'}).then (output) ->
     lines = output.stderr.split("\n")
     messages = []
     for line in lines
@@ -18,14 +18,14 @@ lint = (editor) ->
 
       console.log(line)
       parts = line.match(regex)
-      if !parts || parts.length != 4
-        console.debug("Droping line:", line)
+      if !parts || parts.length != 6
+        console.debug("Dropping line:", line)
       else
         message =
-          filePath: parts[1].trim()
-          range: helpers.rangeFromLineNumber(editor, parseInt(parts[2])-1, 0)
-          type: 'Error'
-          text: parts[3].trim()
+          filePath: parts[3].trim()
+          range: helpers.rangeFromLineNumber(editor, parseInt(parts[4])-1, 0)
+          type: parts[1]
+          text: (if parts[2] then parts[2] + ": " else "") + parts[5].trim()
 
         messages.push(message)
 
@@ -35,15 +35,22 @@ module.exports =
   config:
     extraOptions:
       type: 'array'
-      default: []
-      description: 'Comma separated list of iverilog options'
+      default: ['--lint-only', '--bbox-sys', '--bbox-unsup', '-DGLBL']
+      description: 'Comma separated list of verilator options'
+      items:
+        type: 'string'
+    executable:
+      type: 'string'
+      default: 'verilator'
+      description: 'Path to verilator executable'
+
   activate: ->
-    require('atom-package-deps').install('linter-verilog')
+    require('atom-package-deps').install('linter-verilator')
 
   provideLinter: ->
     provider =
       grammarScopes: ['source.verilog']
       scope: 'project'
       lintOnFly: false
-      name: 'Verilog'
+      name: 'Verilator'
       lint: (editor) => lint(editor)
