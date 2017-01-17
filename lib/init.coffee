@@ -23,7 +23,7 @@ lint = (editor) ->
       else
         message =
           filePath: parts[3].trim()
-          range: helpers.rangeFromLineNumber(editor, parseInt(parts[4])-1, 0)
+          range: helpers.rangeFromLineNumber(editor, Math.min(editor.getLineCount(), parseInt(parts[4]))-1, 0)
           type: parts[1]
           text: (if parts[2] then parts[2] + ": " else "") + parts[5].trim()
 
