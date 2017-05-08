@@ -1,35 +1,5 @@
-{ CompositeDisposable } = require 'atom'
-path = require 'path'
-
-lint = (editor) ->
-  helpers = require('atom-linter')
-  regex = /%(Error|Warning)-?([^:]*): ((?:[A-Z]:)?[^:]+):([^:]+):(.+)/
-  file = editor.getPath().replace(/\\/g,"/")
-  dirname = path.dirname(file)
-
-  args = ("#{arg}" for arg in atom.config.get('linter-verilator.extraOptions'))
-  args = args.concat ['-I' + dirname,  file]
-  helpers.exec(atom.config.get('linter-verilator.executable'), args, {stream: 'both'}).then (output) ->
-    lines = output.stderr.split("\n")
-    messages = []
-    for line in lines
-      if line.length == 0
-        continue;
-
-      console.log(line)
-      parts = line.match(regex)
-      if !parts || parts.length != 6
-        console.debug("Dropping line:", line)
-      else
-        message =
-          filePath: parts[3].trim()
-          range: helpers.rangeFromLineNumber(editor, Math.min(editor.getLineCount(), parseInt(parts[4]))-1, 0)
-          type: parts[1]
-          text: (if parts[2] then parts[2] + ": " else "") + parts[5].trim()
-
-        messages.push(message)
-
-    return messages
+path = null
+helpers = null
 
 module.exports =
   config:
@@ -49,8 +19,39 @@ module.exports =
 
   provideLinter: ->
     provider =
+      name: 'verilator'
+      scope: 'file'
+      lintsOnChange: false
       grammarScopes: ['source.verilog']
-      scope: 'project'
-      lintOnFly: false
-      name: 'Verilator'
-      lint: (editor) => lint(editor)
+      lint: (editor) ->
+        path ?= require 'path'
+        helpers ?= require('atom-linter')
+        regex = /%(Error|Warning)-?([^:]*): ((?:[A-Z]:)?[^:]+):([^:]+):(.+)/
+        file = editor.getPath().replace(/\\/g,"/")
+        dirname = path.dirname(file)
+
+        args = ("#{arg}" for arg in atom.config.get('linter-verilator.extraOptions'))
+        args = args.concat ['-I' + dirname,  file]
+        return helpers.exec(atom.config.get('linter-verilator.executable'), args, {stream: 'stderr', allowEmptyStderr: true}).then (output) ->
+          lines = output.split("\n")
+          messages = []
+          for line in lines
+            if line.length == 0
+              continue;
+
+            #console.log(line)
+            parts = line.match(regex)
+            if !parts || parts.length != 6 || (file != parts[3].trim())
+              #console.debug("Dropping line:", line)
+            else
+              message =
+                location:
+                  file: path.normalize(parts[3].trim()),
+                  position: helpers.generateRange(editor, Math.min(editor.getLineCount(), parseInt(parts[4]))-1, 0)
+                severity: parts[1].toLowerCase()
+                excerpt: (if parts[2] then parts[2] + ": " else "") + parts[5].trim()
+
+              #console.log(message)
+              messages.push(message)
+
+          return messages
